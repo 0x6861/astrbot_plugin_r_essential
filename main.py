@@ -16,6 +16,78 @@ from astrbot.api.star import register, Star
 
 logger = logging.getLogger("astrbot")
 
+async def get_genhao_datetime(dt: Union[datetime.datetime, datetime.date, None] = None) -> str:
+    """
+    计算并返回指定日期对应的“根号日期时间”。
+    规则：
+    - 根号1年1月1日 = 公历 2022-03-26
+    - 每年按公历闰年规则计算（闰年2月29天）
+    - 支持传入任意日期或datetime；若不传入则使用当前时间
+    返回格式示例：
+    "根号3年11月9日 12:34:56"
+    """
+    BASE_DATE = datetime.datetime(2022, 3, 26)
+
+    # 处理输入
+    if dt is None:
+        dt = datetime.datetime.now()
+    elif isinstance(dt, datetime.date) and not isinstance(dt, datetime.datetime):
+        dt = datetime.datetime(dt.year, dt.month, dt.day)
+
+    # 闰年判断
+    def is_leap(year: int) -> bool:
+        return (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0)
+
+    # 返回某根号年的12个月天数
+    def month_lengths(year: int):
+        return [31, 29 if is_leap(year) else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+
+    # 拆分出根号年与年内日序
+    def split_year_day(delta_days: int):
+        if delta_days >= 0:
+            year = 1
+            rem = delta_days
+            while True:
+                yd = 366 if is_leap(year) else 365
+                if rem < yd:
+                    return year, rem
+                rem -= yd
+                year += 1
+        else:
+            year = 0
+            rem = -delta_days - 1
+            while True:
+                yd = 366 if is_leap(year) else 365
+                if rem < yd:
+                    return year, yd - 1 - rem
+                rem -= yd
+                year -= 1
+
+    # 根据年和年内天数求月日
+    def month_day_from_doy(year: int, doy: int):
+        for m, ml in enumerate(month_lengths(year), start=1):
+            if doy < ml:
+                return m, doy + 1
+            doy -= ml
+        raise ValueError("日序号超出范围")
+
+    # 主逻辑
+    delta_days = (dt.date() - BASE_DATE.date()).days
+    year, doy = split_year_day(delta_days)
+    month, day = month_day_from_doy(year, doy)
+    time_str = dt.strftime("%H:%M:%S")
+
+    return f"根号{year}年{month}月{day}日 {time_str}"
+
+async def fetch_hitokoto() -> str:
+    """取得一条一言"""
+    url = "https://v1.hitokoto.cn/?c=d"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            if resp.status != 200:
+                return CommandResult().error("一言请求失败: " + str(resp.status))
+            data = await resp.json()
+    return data["hitokoto"] + " —— " + data["from"]
 
 @register("astrbot_plugin_essential", "Soulter", "", "", "")
 class Main(Star):
@@ -313,20 +385,12 @@ class Main(Star):
 
         return CommandResult().message(result_text).use_t2i(False)
 
-    async def fetch_hitokoto(self) -> str:
-        """取得一条一言"""
-        url = "https://v1.hitokoto.cn/?c=d"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
-                if resp.status != 200:
-                    return CommandResult().error("一言请求失败: " + str(resp.status))
-                data = await resp.json()
-        return data["hitokoto"] + " —— " + data["from"]
 
     @filter.command("一言")
     async def hitokoto(self, message: AstrMessageEvent):
         """来一条一言"""
-        return CommandResult().message(self.fetch_hitokoto())
+        hitokoto = await fetch_hitokoto()
+        return CommandResult().message(hitokoto)
 
     async def save_what_eat_data(self):
         """保存今天吃什么数据"""
@@ -442,68 +506,6 @@ class Main(Star):
             .use_t2i(False)
         )
 
-    async def get_genhao_datetime(dt: Union[datetime.datetime, datetime.date, None] = None) -> str:
-        """
-        计算并返回指定日期对应的“根号日期时间”。
-        规则：
-        - 根号1年1月1日 = 公历 2022-03-26
-        - 每年按公历闰年规则计算（闰年2月29天）
-        - 支持传入任意日期或datetime；若不传入则使用当前时间
-        返回格式示例：
-        "根号3年11月9日 12:34:56"
-        """
-        BASE_DATE = datetime.datetime(2022, 3, 26)
-
-        # 处理输入
-        if dt is None:
-            dt = datetime.datetime.now()
-        elif isinstance(dt, datetime.date) and not isinstance(dt, datetime.datetime):
-            dt = datetime.datetime(dt.year, dt.month, dt.day)
-
-        # 闰年判断
-        def is_leap(year: int) -> bool:
-            return (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0)
-
-        # 返回某根号年的12个月天数
-        def month_lengths(year: int):
-            return [31, 29 if is_leap(year) else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-
-        # 拆分出根号年与年内日序
-        def split_year_day(delta_days: int):
-            if delta_days >= 0:
-                year = 1
-                rem = delta_days
-                while True:
-                    yd = 366 if is_leap(year) else 365
-                    if rem < yd:
-                        return year, rem
-                    rem -= yd
-                    year += 1
-            else:
-                year = 0
-                rem = -delta_days - 1
-                while True:
-                    yd = 366 if is_leap(year) else 365
-                    if rem < yd:
-                        return year, yd - 1 - rem
-                    rem -= yd
-                    year -= 1
-
-        # 根据年和年内天数求月日
-        def month_day_from_doy(year: int, doy: int):
-            for m, ml in enumerate(month_lengths(year), start=1):
-                if doy < ml:
-                    return m, doy + 1
-                doy -= ml
-            raise ValueError("日序号超出范围")
-
-        # 主逻辑
-        delta_days = (dt.date() - BASE_DATE.date()).days
-        year, doy = split_year_day(delta_days)
-        month, day = month_day_from_doy(year, doy)
-        time_str = dt.strftime("%H:%M:%S")
-
-        return f"根号{year}年{month}月{day}日 {time_str}"
 
     @filter.regex(r"^(早安|晚安)")
     async def good_morning(self, message: AstrMessageEvent):
@@ -586,8 +588,8 @@ class Main(Star):
             if sleep_duration_human == "":
                 sleep_duration_human = "你没睡"
 
-            hitokoto = await self.fetch_hitokoto()
-            rtime = await self.get_genhao_datetime(curr_utc8)
+            hitokoto = await fetch_hitokoto()
+            rtime = await get_genhao_datetime(curr_utc8)
 
             return (
                 CommandResult()
