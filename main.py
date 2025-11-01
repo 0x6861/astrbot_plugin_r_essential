@@ -312,18 +312,23 @@ class Main(Star):
 
         return CommandResult().message(result_text).use_t2i(False)
 
-    @filter.command("一言")
-    async def hitokoto(self, message: AstrMessageEvent):
-        """来一条一言"""
-        url = "https://v1.hitokoto.cn"
+    async def fetch_hitokoto(self) -> str:
+        """取得一条一言"""
+        url = "https://v1.hitokoto.cn/?c=d"
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as resp:
                 if resp.status != 200:
-                    return CommandResult().error("请求失败")
+                    return CommandResult().error("一言请求失败: " + str(resp.status))
                 data = await resp.json()
-        return CommandResult().message(data["hitokoto"] + " —— " + data["from"])
+        return data["hitokoto"] + " —— " + data["from"]
+
+    @filter.command("一言")
+    async def hitokoto(self, message: AstrMessageEvent):
+        """来一条一言"""
+        return CommandResult().message(self.fetch_hitokoto())
 
     async def save_what_eat_data(self):
+        """保存今天吃什么数据"""
         path = os.path.abspath(os.path.dirname(__file__))
         with open(path + "/resources/food.json", "w", encoding="utf-8") as f:
             f.write(
@@ -436,6 +441,26 @@ class Main(Star):
             .use_t2i(False)
         )
 
+    def get_rtime(self) -> str:
+        rbase_date = datetime(2022, 3, 26)
+        now = datetime.now()
+        
+        # 计算从基准日到今天的天数差
+        delta_days = (now - rbase_date).days
+        
+        # 每年365天
+        ryear = delta_days // 365 + 1
+        remaining_days = delta_days % 365
+        
+        # 计算月日（这里假设每月30天，12个月共360天，剩余天归入第12月）
+        rmonth = remaining_days // 30 + 1
+        rday = remaining_days % 30 + 1
+        
+        # 时间部分
+        rtime = now.strftime("%H:%M:%S")
+        
+        return f"根号{ryear}年{rmonth}月{rday}日 {rtime}"
+
     @filter.regex(r"^(早安|晚安)")
     async def good_morning(self, message: AstrMessageEvent):
         """和Bot说早晚安，记录睡眠时间，培养良好作息"""
@@ -514,10 +539,13 @@ class Main(Star):
                 mins = int((sleep_duration % 3600) / 60)
                 sleep_duration_human = f"{hrs}小时{mins}分"
 
+            if sleep_duration_human == "":
+                sleep_duration_human = "你没睡"
+
             return (
                 CommandResult()
                 .message(
-                    f"早上好喵，{user_name}！\n现在是 {curr_human}，昨晚你睡了 {sleep_duration_human}。"
+                    f"早上好喵，{user_name}！\n现在是 {self.get_rtime()}，昨晚你睡了 {sleep_duration_human}~\n「{self.fetch_hitokoto}」"
                 )
                 .use_t2i(False)
             )
@@ -525,7 +553,7 @@ class Main(Star):
             return (
                 CommandResult()
                 .message(
-                    f"快睡觉喵，{user_name}！\n现在是 {curr_human}，你是本群今天第 {curr_day_sleeping} 个睡觉的。"
+                    f"快睡觉喵，{user_name}！\n现在是 {self.get_rtime()}，你是本群今天第 {curr_day_sleeping} 个睡觉的~\n「{self.fetch_hitokoto}」"
                 )
                 .use_t2i(False)
             )
