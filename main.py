@@ -80,14 +80,14 @@ async def get_genhao_datetime(dt: Union[datetime.datetime, datetime.date, None] 
     return f"根号{year}年{month}月{day}日 {time_str}"
 
 async def fetch_hitokoto() -> str:
-    """取得一条一言"""
+    """取得一条一言（始终返回字符串）"""
     url = "https://v1.hitokoto.cn/?c=d"
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as resp:
             if resp.status != 200:
-                return CommandResult().error("一言请求失败: " + str(resp.status))
+                return "一言请求失败: " + str(resp.status)
             data = await resp.json()
-    return data["hitokoto"] + " —— " + data["from"]
+    return data.get("hitokoto", "") + " —— " + data.get("from", "")
 
 @register("astrbot_plugin_essential", "Soulter", "", "", "")
 class Main(Star):
@@ -157,7 +157,7 @@ class Main(Star):
         self.good_morning_cd[user_id] = current_time
 
     @filter.event_message_type(filter.EventMessageType.ALL)
-    async def handle_search_anime(self, message: AstrMessageEvent):
+    async def handle_search_anime(self, message: AstrMessageEvent, *args, **kwargs):
         """检查是否有搜番请求"""
         sender = message.get_sender_id()
         if sender in self.search_anmime_demand_users:
@@ -378,7 +378,7 @@ class Main(Star):
             f"状态: {status}\n"
             f"服务器IP: {ip}\n"
             f"版本: {version}\n"
-            f"MOTD: {motd}"
+            f"MOTD: {motd}\n"
             f"玩家人数: {players}\n"
             f"在线玩家: \n{name_list_str}"
         )
@@ -508,7 +508,7 @@ class Main(Star):
 
 
     @filter.regex(r"^(早安|晚安)")
-    async def good_morning(self, message: AstrMessageEvent):
+    async def good_morning(self, message: AstrMessageEvent, *args, **kwargs):
         """和Bot说早晚安，记录睡眠时间，培养良好作息"""
         # CREDIT: 灵感部分借鉴自：https://github.com/MinatoAquaCrews/nonebot_plugin_morning
         umo_id = message.unified_msg_origin
@@ -522,6 +522,10 @@ class Main(Star):
             return CommandResult().message("你刚刚已经说过早安/晚安了，请30分钟后再试喵~").use_t2i(False)
 
         is_night = "晚安" in message.message_str
+
+        # ✅ 提前准备通用需要的变量，避免晚安分支 NameError
+        hitokoto = await fetch_hitokoto()
+        rtime = await get_genhao_datetime(curr_utc8)
 
         if umo_id in self.good_morning_data:
             umo = self.good_morning_data[umo_id]
@@ -587,9 +591,6 @@ class Main(Star):
 
             if sleep_duration_human == "":
                 sleep_duration_human = "你没睡"
-
-            hitokoto = await fetch_hitokoto()
-            rtime = await get_genhao_datetime(curr_utc8)
 
             return (
                 CommandResult()
