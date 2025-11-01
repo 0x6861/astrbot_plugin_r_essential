@@ -442,7 +442,7 @@ class Main(Star):
             .use_t2i(False)
         )
 
-    def get_genhao_datetime(dt: Union[datetime.datetime, datetime.date, None] = None) -> str:
+    async def get_genhao_datetime(dt: Union[datetime.datetime, datetime.date, None] = None) -> str:
         """
         计算并返回指定日期对应的“根号日期时间”。
         规则：
@@ -586,12 +586,13 @@ class Main(Star):
             if sleep_duration_human == "":
                 sleep_duration_human = "你没睡"
 
-            rtime = self.get_genhao_datetime(curr_utc8)
+            hitokoto = await self.fetch_hitokoto()
+            rtime = await self.get_genhao_datetime(curr_utc8)
 
             return (
                 CommandResult()
                 .message(
-                    f"早上好喵，{user_name}！\n现在是 {rtime}，昨晚你睡了 {sleep_duration_human}~\n「{self.fetch_hitokoto}」"
+                    f"早上好喵，{user_name}！\n现在是 {rtime}，昨晚你睡了 {sleep_duration_human}~\n「{hitokoto}」"
                 )
                 .use_t2i(False)
             )
@@ -599,7 +600,7 @@ class Main(Star):
             return (
                 CommandResult()
                 .message(
-                    f"快睡觉喵，{user_name}！\n现在是 {rtime}，你是本群今天第 {curr_day_sleeping} 个睡觉的~\n「{self.fetch_hitokoto}」"
+                    f"快睡觉喵，{user_name}！\n现在是 {rtime}，你是本群今天第 {curr_day_sleeping} 个睡觉的~\n「{hitokoto}」"
                 )
                 .use_t2i(False)
             )
